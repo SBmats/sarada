@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Student & Admin Portal</title>
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #e0f7fa;
+        display: flex;
+        justify-content: center;
+        padding: 20px;
+      }
+      .container {
+        max-width: 900px;
+        width: 100%;
+        background: #fff;
+        padding: 20px;
+        border-radius: 12px;
+      }
+      header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      h1 {
+        color: #0277bd;
+      }
+      .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        background: #0277bd;
+        color: #fff;
+        cursor: pointer;
+        margin: 5px;
+      }
+      .btn.secondary {
+        background: #fff;
+        color: #0277bd;
+        border: 1px solid #0277bd;
+      }
+      input {
+        padding: 6px;
+        margin: 4px;
+        width: 200px;
+      }
+      .q-card {
+        padding: 20px;
+        background: #f1f1f1;
+        margin-bottom: 15px;
+        border-radius: 8px;
+      }
+      .options label {
+        display: block;
+        margin: 5px 0;
+      }
+      .info-pill {
+        display: inline-block;
+        padding: 4px 8px;
+        background: #ccc;
+        border-radius: 12px;
+        margin-right: 5px;
+      }
+      .small-btn {
+        padding: 4px 8px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        margin: 2px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Student & Admin Portal</h1>
+        <div>Per-Question Timer & Restricted Exam</div>
+        <button class="btn" onclick="studentLogin()">Student Login</button>
+        <button class="btn secondary" onclick="adminLogin()">
+          Admin Login
+        </button>
+      </header>
+      <main id="app">
+        <div style="text-align: center">Welcome! Choose Student or Admin</div>
+      </main>
+    </div>
+
+    <script>
+      const app = document.getElementById("app");
+      const SHEET_WEB_APP_URL =
+        "https://script.google.com/macros/s/AKfycbwyEcoLUoPtmZ1rQgEDfYUPRc4iLp6pX1zvuBHCS23iIR6wGZL2VOtyoaKAbDtKICNbmg/exec"; // Replace with your deployed Web App URL
+
+      function escapeHtml(s) {
+        return (s + "").replace(
+          /[&<>"']/g,
+          (m) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[m])
+        );
+      }
+
+      /* === Student Login === */
+      function studentLogin() {
+        app.innerHTML = `<div style="text-align:center">
+    <h2>Student Login</h2>
+    <input id="name" placeholder="Full name"/><br>
+    <input id="roll" placeholder="Roll number"/><br>
+    <input id="branch" placeholder="Branch"/><br>
+    <input id="phone" placeholder="Phone number"/><br>
+    <button class="btn" onclick="saveStudent()">Login</button>
+  </div>`;
+      }
+
+      function saveStudent() {
+        const s = {
+          name: document.getElementById("name").value || "Unknown",
+          roll:
+            document.getElementById("roll").value ||
+            "R" + Date.now().toString().slice(-5),
+          branch: document.getElementById("branch").value || "",
+          phone: document.getElementById("phone").value || "",
+        };
+        localStorage.setItem("currentStudent", JSON.stringify(s));
+        studentDashboard();
+      }
+
+      function studentDashboard() {
+        const s = JSON.parse(localStorage.getItem("currentStudent"));
+        if (!s) return studentLogin();
+        const activeBank = JSON.parse(
+          localStorage.getItem("activeBank") || "null"
+        );
+        app.innerHTML = `<div style="text-align:center">
+    <h2>Welcome ${escapeHtml(s.name)} (${escapeHtml(s.roll)})</h2>
+    ${
+      activeBank
+        ? `<button class="btn" onclick="startExam()">Start Exam (${escapeHtml(
+            activeBank.bankName
+          )})</button>`
+        : "<p>No active bank</p>"
+    }
+    <button class="btn secondary" onclick="clearStudentSession()">Logout</button>
+  </div>`;
+      }
+
+      function clearStudentSession() {
+        localStorage.removeItem("currentStudent");
+        studentLogin();
+      }
+
+      /* === Admin Login === */
+      function adminLogin() {
+        app.innerHTML = `<div style="text-align:center">
+    <h2>Admin Login</h2>
+    <input id="adminPass" type="password" placeholder="Password"/>
+    <button class="btn" onclick="checkAdmin()">Login</button>
+    <div>Default password: admin123</div>
+  </div>`;
+      }
+
+      function checkAdmin() {
+        if (document.getElementById("adminPass").value === "admin123") {
+          localStorage.setItem("adminLoggedIn", "1");
+          adminPanel();
+        } else alert("Wrong password");
+      }
+
+      function adminPanel() {
+        if (!localStorage.getItem("adminLoggedIn")) return adminLogin();
+        const allBanks = JSON.parse(
+          localStorage.getItem("questionBanks") || "[]"
+        );
+        const activeBank = JSON.parse(
+          localStorage.getItem("activeBank") || "null"
+        );
+        let banksHtml = allBanks.length
+          ? allBanks
+              .map(
+                (b, i) =>
+                  `<div><strong>${b.bankName}</strong> — ${b.questions.length} questions <button class="small-btn" onclick="selectBank(${i})">Select</button></div>`
+              )
+              .join("")
+          : "<p>No banks uploaded</p>";
+        app.innerHTML = `<div style="text-align:center">
+    <h2>Admin Panel</h2>
+    <input id="docxFile" type="file" accept=".docx"/>
+    <button class="btn" onclick="uploadQuestions()">Upload Questions</button>
+    <hr><h3>Question Banks</h3>${banksHtml}
+    <p>Active bank: ${activeBank ? escapeHtml(activeBank.bankName) : "None"}</p>
+    <button class="btn secondary" onclick="clearAllBanks()">Clear Banks</button>
+    <button class="btn secondary" onclick="logoutAdmin()">Logout</button>
+  </div>`;
+      }
+
+      async function uploadQuestions() {
+        const f = document.getElementById("docxFile").files[0];
+        if (!f) return alert("Select .docx");
+        const bankName = prompt("Enter bank name");
+        if (!bankName) return alert("Bank name required");
+        try {
+          const arr = await f.arrayBuffer();
+          const res = await mammoth.extractRawText({ arrayBuffer: arr });
+          const parts = res.value.split(/\n?\d+\.\s+/).slice(1);
+          const qList = parts
+            .map((p) => {
+              const lines = p
+                .trim()
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean);
+              const q = lines[0] || "Question";
+              const opts = [];
+              for (let i = 1; i < lines.length && opts.length < 4; i++) {
+                const m = lines[i].match(/^[A-Da-d][\)\.\-:\s]+(.*)$/);
+                opts.push(m ? m[1].trim() : lines[i]);
+              }
+              while (opts.length < 4) opts.push("Option");
+              const ansLine = lines.find((l) => /^answer\s*[:]/i.test(l));
+              const ans = ansLine
+                ? (ansLine.split(":")[1] || "").trim().toUpperCase().slice(0, 1)
+                : "";
+              return { question: q, options: opts, answer: ans };
+            })
+            .filter((q) => q.question);
+          const allBanks = JSON.parse(
+            localStorage.getItem("questionBanks") || "[]"
+          );
+          allBanks.push({ bankName, questions: qList });
+          localStorage.setItem("questionBanks", JSON.stringify(allBanks));
+          alert(`${qList.length} questions uploaded`);
+          adminPanel();
+        } catch (e) {
+          alert("Error parsing .docx");
+        }
+      }
+
+      function selectBank(i) {
+        const allBanks = JSON.parse(
+          localStorage.getItem("questionBanks") || "[]"
+        );
+        localStorage.setItem("activeBank", JSON.stringify(allBanks[i]));
+        alert(`Selected "${allBanks[i].bankName}"`);
+        adminPanel();
+      }
+      function clearAllBanks() {
+        if (confirm("Clear all banks?")) {
+          localStorage.removeItem("questionBanks");
+          localStorage.removeItem("activeBank");
+          adminPanel();
+        }
+      }
+      function logoutAdmin() {
+        localStorage.removeItem("adminLoggedIn");
+        adminLogin();
+      }
+
+      /* === Exam === */
+      function startExam() {
+        const s = JSON.parse(localStorage.getItem("currentStudent"));
+        const bank = JSON.parse(localStorage.getItem("activeBank") || "null");
+        if (!s) return studentLogin();
+        if (!bank) return alert("No bank");
+        const qList = bank.questions;
+        if (qList.length < 50) return alert("Need 50+ questions");
+
+        const exam = shuffleArray(qList).slice(0, 50);
+        let idx = 0,
+          answers = [],
+          timer,
+          tLeft;
+        let warns = 0;
+        function tabBlock() {
+          warns++;
+          if (warns === 1) alert("⚠️ Warning: Do not switch tabs!");
+          else if (warns >= 2) {
+            alert("❌ Exam submitted.");
+            finish();
+          }
+        }
+        window.addEventListener("blur", tabBlock);
+
+        renderQ();
+        function renderQ() {
+          clearInterval(timer);
+          tLeft = 30;
+          const q = exam[idx];
+          const opts = q.options
+            .map(
+              (o, i) =>
+                `<label><input type="radio" name="opt" value="${String.fromCharCode(
+                  65 + i
+                )}"> ${String.fromCharCode(65 + i)}) ${o}</label>`
+            )
+            .join("");
+          app.innerHTML = `<div class="q-card"><h3>Q${idx + 1}. ${
+            q.question
+          }</h3><div class="options">${opts}</div><div>
+      <span class="info-pill">Q${idx + 1}/${exam.length}</span>
+      <span class="info-pill" id="qt">⏳30s</span>
+      <button class="btn" id="nextBtn">Next</button>
+    </div></div>`;
+          document.getElementById("nextBtn").onclick = saveAns;
+          function tick() {
+            document.getElementById("qt").textContent = `⏳ ${tLeft}s`;
+            if (tLeft <= 0) {
+              clearInterval(timer);
+              saveAns();
+            }
+            tLeft--;
+          }
+          tick();
+          timer = setInterval(tick, 1000);
+        }
+
+        function saveAns() {
+          clearInterval(timer);
+          const sel = document.querySelector('input[name="opt"]:checked');
+          answers.push({
+            question: exam[idx].question,
+            selected: sel ? sel.value : "",
+            correct: exam[idx].answer,
+          });
+          idx++;
+          if (idx >= exam.length) finish();
+          else renderQ();
+        }
+
+        function finish() {
+          clearInterval(timer);
+          window.removeEventListener("blur", tabBlock);
+          let score = 0;
+          answers.forEach((a) => {
+            if (a.selected === a.correct) score++;
+          });
+          const payload = { ...s, score, total: exam.length, details: answers };
+          fetch(SHEET_WEB_APP_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.status === "success") {
+                alert("Exam submitted!");
+                studentDashboard();
+              } else alert("Error:" + data.message);
+            })
+            .catch((err) => alert("Error:" + err.message));
+        }
+        window.forceFinishExam = finish;
+      }
+
+      function shuffleArray(a) {
+        const arr = a.slice();
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+      (function init() {
+        const s = JSON.parse(localStorage.getItem("currentStudent") || "null");
+        if (s) studentDashboard();
+      })();
+    </script>
+  </body>
+</html>
